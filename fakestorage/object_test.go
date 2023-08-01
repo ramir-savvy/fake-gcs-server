@@ -392,7 +392,9 @@ func TestServerClientObjectTranscoding(t *testing.T) {
 				Name:            objectName,
 				ContentType:     contentType,
 				ContentEncoding: contentEncoding,
-				Crc32c:          checksum.EncodedCrc32cChecksum([]byte(content)),
+				// At storage time the CRC32C must be set to the CRC32C of the
+				// compressed data.
+				Crc32c: checksum.EncodedCrc32cChecksum(b.Bytes()),
 			},
 			Content: b.Bytes(),
 		},
@@ -1990,6 +1992,7 @@ func TestServiceClientComposeObject(t *testing.T) {
 			destObjectName    string
 			sourceObjectNames []string
 			expectedContent   string
+			expectedError     string
 		}{
 			{
 				"destination file doesn't exist",
@@ -1997,6 +2000,7 @@ func TestServiceClientComposeObject(t *testing.T) {
 				"files/some-file.txt",
 				[]string{"files/source1.txt", "files/source2.txt"},
 				source1Content + source2Content,
+				"",
 			},
 			{
 				"destination file already exists",
@@ -2004,6 +2008,7 @@ func TestServiceClientComposeObject(t *testing.T) {
 				"files/destination.txt",
 				[]string{"files/source1.txt", "files/source2.txt"},
 				source1Content + source2Content,
+				"",
 			},
 			{
 				"destination is a source",
@@ -2011,6 +2016,15 @@ func TestServiceClientComposeObject(t *testing.T) {
 				"files/source3.txt",
 				[]string{"files/source2.txt", "files/source3.txt"},
 				source2Content + source3Content,
+				"",
+			},
+			{
+				"too many objects at once",
+				"first-bucket",
+				"files/destination.txt",
+				[]string{"01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33"},
+				"",
+				"googleapi: Error 400: The number of source components provided (33) exceeds the maximum (32)",
 			},
 		}
 		for _, test := range tests {
@@ -2031,6 +2045,9 @@ func TestServiceClientComposeObject(t *testing.T) {
 				composer.Metadata = map[string]string{"baz": "qux"}
 				attrs, err := composer.Run(context.TODO())
 				if err != nil {
+					if err.Error() == test.expectedError {
+						return
+					}
 					t.Fatal(err)
 				}
 

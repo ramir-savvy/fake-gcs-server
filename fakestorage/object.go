@@ -887,6 +887,13 @@ func (s *Server) downloadObject(w http.ResponseWriter, r *http.Request) {
 		if obj.ContentEncoding != "" && !transcoded {
 			w.Header().Set("Content-Encoding", obj.ContentEncoding)
 		}
+		// X-Goog-Stored-Content-Encoding must be set to the original encoding,
+		// defaulting to "identity" if no encoding was set.
+		storedContentEncoding := "identity"
+		if obj.ContentEncoding != "" {
+			storedContentEncoding = obj.ContentEncoding
+		}
+		w.Header().Set("X-Goog-Stored-Content-Encoding", storedContentEncoding)
 	}
 
 	w.WriteHeader(status)
@@ -1111,6 +1118,14 @@ func (s *Server) composeObject(r *http.Request) jsonResponse {
 		return jsonResponse{
 			status:       http.StatusBadRequest,
 			errorMessage: "Error parsing request body",
+		}
+	}
+
+	const maxComposeObjects = 32
+	if len(composeRequest.SourceObjects) > maxComposeObjects {
+		return jsonResponse{
+			status:       http.StatusBadRequest,
+			errorMessage: fmt.Sprintf("The number of source components provided (%d) exceeds the maximum (%d)", len(composeRequest.SourceObjects), maxComposeObjects),
 		}
 	}
 
